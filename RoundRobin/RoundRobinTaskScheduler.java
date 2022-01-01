@@ -1,5 +1,4 @@
 package org.cloudbus.cloudsim.examples;
-
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -27,12 +26,8 @@ import org.cloudbus.cloudsim.provisioners.BwProvisionerSimple;
 import org.cloudbus.cloudsim.provisioners.PeProvisionerSimple;
 import org.cloudbus.cloudsim.provisioners.RamProvisionerSimple;
 
-/**
- * An example showing how to create
- * scalable simulations.
- */
-public class Simulation {
-
+public class RoundRobinTaskScheduler {
+	private static float timeSlice = (float) 8;
 	/** The cloudlet list. */
 	private static List<Cloudlet> cloudletList;
 
@@ -86,8 +81,6 @@ public class Simulation {
 			cloudlet[i] = new Cloudlet(i, length +r.nextInt(2000), pesNumber, fileSize, outputSize, utilizationModel, utilizationModel, utilizationModel);
 			// setting the owner of these Cloudlets
 			cloudlet[i].setUserId(userId);
-			int priority = r.nextInt((5 - 1) + 1) + 1;
-			cloudlet[i].setPriority(priority);
 			list.add(cloudlet[i]);
 		}
 
@@ -101,9 +94,10 @@ public class Simulation {
 	 * Creates main() to run this example
 	 */
 	public static void main(String[] args) {
-		Log.printLine("Starting SJF Scheduling with priority...");
+		Log.printLine("========= Round Robin Task Scheduling Algorithm Implementation ========");
 
 		try {
+			Log.printLine("======== Starting Execution ========");
 			// First step: Initialize the CloudSim package. It should be called
 			// before creating any entities.
 			int num_user = 3;   // number of grid users
@@ -115,6 +109,7 @@ public class Simulation {
 
 			// Second step: Create Datacenters
 			//Datacenters are the resource providers in CloudSim. We need at list one of them to run a CloudSim simulation
+			@SuppressWarnings("not used")
 			Datacenter datacenter0 = createDatacenter("Datacenter_0");
 			Datacenter datacenter1 = createDatacenter("Datacenter_1");
 
@@ -123,8 +118,8 @@ public class Simulation {
 			int brokerId = broker.getId();
 
 			//Fourth step: Create VMs and Cloudlets and send them to broker
-			vmlist = createVM(brokerId,1); //creating 10 vms
-			cloudletList = createCloudlet(brokerId,10); // creating 40 cloudlets
+			vmlist = createVM(brokerId,10); //creating 10 vms
+			cloudletList = createCloudlet(brokerId,40); // creating 40 cloudlets
 
 			broker.submitVmList(vmlist);
 			broker.submitCloudletList(cloudletList);
@@ -138,12 +133,7 @@ public class Simulation {
 			CloudSim.stopSimulation();
 
 			printCloudletList(newList);
-
-			//Print the debt of each user to each datacenter
-//			datacenter0.printDebts();
-//			datacenter1.printDebts();
-
-			Log.printLine("SJF Scheduling with priority finished!");
+			Log.printLine("Round Robin has finished executing!");
 		}
 		catch (Exception e)
 		{
@@ -287,24 +277,95 @@ public class Simulation {
 	private static void printCloudletList(List<Cloudlet> list) {
 		int size = list.size();
 		Cloudlet cloudlet;
-
+		int pes =0;
+		float sum = 0;
+		float burstTime[] = new float[size];
+		float waitingTime[] = new float[size];
+		float turnAroundTime[] = new float[size];
+		float a[] = new float[size];
 		String indent = "    ";
-		Log.printLine();
-		Log.printLine("========== OUTPUT ==========");
-		Log.printLine("Cloudlet ID" + indent + "STATUS" + indent +
-				"Data center ID" + indent + "VM ID" + indent + indent + "Time" + indent + "Start Time" + indent + "Finish Time" +indent+"Priority"+indent);
-
 		DecimalFormat dft = new DecimalFormat("###.##");
+		for(int i = 0; i<size; i++) {
+			cloudlet = list.get(i);
+			//We get the cpu time for each cloudlet
+			String cpuTime = dft.format(cloudlet.getActualCPUTime());
+			float convertedCPUTime = (float) Double.parseDouble(cpuTime);
+			burstTime[i] = convertedCPUTime; //burst time is equal to execution time.
+		}
+		for(int i=0; i<size; i++) {
+			a[i] = burstTime[i];
+		}
+		for(int i=0; i<size; i++) {
+			waitingTime[i] = 0;
+		}
+		do {
+			for(int i=0; i<size; i++) {
+				if(burstTime[i]>timeSlice) {
+					burstTime[i] -= timeSlice;
+					for(int j=0; j<size; j++) {
+						if((j != i) && (burstTime[j] != 0)) {
+							waitingTime[j] += timeSlice;
+						}
+					}
+				}
+				else {
+					for(int j=0; j<size; j++) {
+						if((j != i) && (burstTime[j] != 0)) {
+							waitingTime[j] += burstTime[i];
+						}
+					}
+					burstTime[i] = 0;
+				}
+			}
+			sum = 0;
+			for(int k=0; k<size; k++) {
+				sum += burstTime[k];
+			}	
+		}while(sum != 0);
+		for(int i=0; i<size; i++) {
+			turnAroundTime[i] = waitingTime[i] + a[i];
+		}
+		
+		/* Printing The Calculated Outputs */
+		
+		Log.printLine("========== OUTPUT ==========");
+		Log.print("Cloudlet \t Burst Time \t Waiting Time \t Turn Around Time");
+		Log.printLine();
+		Log.print("-------------------------------------------------------------------");
+		for(int i=0; i<size; i++) {
+			cloudlet = list.get(i);
+			pes = list.get(i).getNumberOfPes();
+			System.out.println("\n");
+			System.out.println("Cloudlet: "+cloudlet.getCloudletId()+ "\t\t" +a[i]+ "\t\t" +waitingTime[i]+ "\t\t" +turnAroundTime[i]);
+		}
+		/* Average waiting and turn around time */
+		float averageWaitingTime = 0;
+		float averageTurnAroundTime = 0;
+		for(int j=0; j<size; j++) {
+			averageWaitingTime += waitingTime[j];
+		}
+		for(int j=0; j<size; j++) {
+			averageTurnAroundTime += turnAroundTime[j];
+		}
+		System.out.println("Average Waiting Time on Total: " +(averageWaitingTime/size)+ "\nAverage Turn Around Time on Total: " +(averageTurnAroundTime/size));
+		
+		/*
+		 * Output 
+		 */
+		Log.printLine();
+		Log.printLine("Cloudlet ID" + indent + "STATUS" + indent +
+				"Data center ID" + indent + "VM ID" + indent + indent + "Time" + indent + "Start Time" + indent + "Finish Time" +indent+ "User ID" +indent+ "Waiting Time" +indent+ indent + "Turn Around Time");
+
 		for (int i = 0; i < size; i++) {
 			cloudlet = list.get(i);
 			Log.print(indent + cloudlet.getCloudletId() + indent + indent);
 
 			if (cloudlet.getCloudletStatus() == Cloudlet.SUCCESS){
 				Log.print("SUCCESS");
-				
-				Log.printLine( indent + indent + cloudlet.getResourceId() + indent + indent + indent + cloudlet.getVmId() +
+
+				Log.printLine( indent + indent + indent+ cloudlet.getResourceId() + indent + indent + indent + cloudlet.getVmId() +
 						indent + indent + indent + dft.format(cloudlet.getActualCPUTime()) +
-						indent + indent + dft.format(cloudlet.getExecStartTime())+ indent + indent + indent + dft.format(cloudlet.getFinishTime())+indent +cloudlet.getPriority());
+						indent + indent  + dft.format(cloudlet.getExecStartTime())+ indent + indent  + dft.format(cloudlet.getFinishTime())+indent+indent + indent +cloudlet.getUserId() + indent + indent + indent + waitingTime[i] + indent + indent + indent + turnAroundTime[i]);
 				
 								
 			}
@@ -312,4 +373,3 @@ public class Simulation {
 
 	}
 }
-
