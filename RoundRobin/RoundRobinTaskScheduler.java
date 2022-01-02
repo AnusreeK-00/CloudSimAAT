@@ -27,7 +27,7 @@ import org.cloudbus.cloudsim.provisioners.PeProvisionerSimple;
 import org.cloudbus.cloudsim.provisioners.RamProvisionerSimple;
 
 public class RoundRobinTaskScheduler {
-	private static float timeSlice = (float) 8;
+
 	/** The cloudlet list. */
 	private static List<Cloudlet> cloudletList;
 
@@ -118,8 +118,8 @@ public class RoundRobinTaskScheduler {
 			int brokerId = broker.getId();
 
 			//Fourth step: Create VMs and Cloudlets and send them to broker
-			vmlist = createVM(brokerId,10); //creating 10 vms
-			cloudletList = createCloudlet(brokerId,40); // creating 40 cloudlets
+			vmlist = createVM(brokerId,2); //creating 10 vms
+			cloudletList = createCloudlet(brokerId,10); // creating 40 cloudlets
 
 			broker.submitVmList(vmlist);
 			broker.submitCloudletList(cloudletList);
@@ -279,10 +279,9 @@ public class RoundRobinTaskScheduler {
 		Cloudlet cloudlet;
 		int pes =0;
 		float sum = 0;
-		float burstTime[] = new float[size];
+		float responseTime[] = new float[size];
 		float waitingTime[] = new float[size];
 		float turnAroundTime[] = new float[size];
-		float a[] = new float[size];
 		String indent = "    ";
 		DecimalFormat dft = new DecimalFormat("###.##");
 		for(int i = 0; i<size; i++) {
@@ -290,71 +289,32 @@ public class RoundRobinTaskScheduler {
 			//We get the cpu time for each cloudlet
 			String cpuTime = dft.format(cloudlet.getActualCPUTime());
 			float convertedCPUTime = (float) Double.parseDouble(cpuTime);
-			burstTime[i] = convertedCPUTime; //burst time is equal to execution time.
-		}
-		for(int i=0; i<size; i++) {
-			a[i] = burstTime[i];
-		}
-		for(int i=0; i<size; i++) {
-			waitingTime[i] = 0;
-		}
-		do {
-			for(int i=0; i<size; i++) {
-				if(burstTime[i]>timeSlice) {
-					burstTime[i] -= timeSlice;
-					for(int j=0; j<size; j++) {
-						if((j != i) && (burstTime[j] != 0)) {
-							waitingTime[j] += timeSlice;
-						}
-					}
-				}
-				else {
-					for(int j=0; j<size; j++) {
-						if((j != i) && (burstTime[j] != 0)) {
-							waitingTime[j] += burstTime[i];
-						}
-					}
-					burstTime[i] = 0;
-				}
-			}
-			sum = 0;
-			for(int k=0; k<size; k++) {
-				sum += burstTime[k];
-			}	
-		}while(sum != 0);
-		for(int i=0; i<size; i++) {
-			turnAroundTime[i] = waitingTime[i] + a[i];
+			responseTime[i] = (float) Double.parseDouble(dft.format(cloudlet.getExecStartTime()-cloudlet.getSubmissionTime()));
+			waitingTime[i] = (float) Double.parseDouble(dft.format(cloudlet.getWaitingTime()));
+			turnAroundTime[i] = (float) Double.parseDouble(dft.format(cloudlet.getFinishTime()-cloudlet.getSubmissionTime()));
 		}
 		
-		/* Printing The Calculated Outputs */
-		
-		Log.printLine("========== OUTPUT ==========");
-		Log.print("Cloudlet \t Burst Time \t Waiting Time \t Turn Around Time");
-		Log.printLine();
-		Log.print("-------------------------------------------------------------------");
-		for(int i=0; i<size; i++) {
-			cloudlet = list.get(i);
-			pes = list.get(i).getNumberOfPes();
-			System.out.println("\n");
-			System.out.println("Cloudlet: "+cloudlet.getCloudletId()+ "\t\t" +a[i]+ "\t\t" +waitingTime[i]+ "\t\t" +turnAroundTime[i]);
-		}
 		/* Average waiting and turn around time */
 		float averageWaitingTime = 0;
+		float averageResponseTime = 0;
 		float averageTurnAroundTime = 0;
 		for(int j=0; j<size; j++) {
 			averageWaitingTime += waitingTime[j];
 		}
 		for(int j=0; j<size; j++) {
+			averageResponseTime += responseTime[j];
+		}
+		for(int j=0; j<size; j++) {
 			averageTurnAroundTime += turnAroundTime[j];
 		}
-		System.out.println("Average Waiting Time on Total: " +(averageWaitingTime/size)+ "\nAverage Turn Around Time on Total: " +(averageTurnAroundTime/size));
+		System.out.println("\nAverage Response Time on Total: " +(averageResponseTime/size)+ "\nAverage Waiting Time on Total: " +(averageWaitingTime/size)+ "\nAverage Turn Around Time on Total: " +(averageTurnAroundTime/size));
 		
 		/*
 		 * Output 
 		 */
 		Log.printLine();
 		Log.printLine("Cloudlet ID" + indent + "STATUS" + indent +
-				"Data center ID" + indent + "VM ID" + indent + indent + "Time" + indent + "Start Time" + indent + "Finish Time" +indent+ "User ID" +indent+ "Waiting Time" +indent+ indent + "Turn Around Time");
+				"Data center ID" + indent + "VM ID" + indent + indent + "Time" + indent + "Start Time" + indent + "Finish Time" +indent+ "Response Time" +indent+ "Waiting Time"+indent+ "Turn Around Time");
 
 		for (int i = 0; i < size; i++) {
 			cloudlet = list.get(i);
@@ -365,7 +325,7 @@ public class RoundRobinTaskScheduler {
 
 				Log.printLine( indent + indent + indent+ cloudlet.getResourceId() + indent + indent + indent + cloudlet.getVmId() +
 						indent + indent + indent + dft.format(cloudlet.getActualCPUTime()) +
-						indent + indent  + dft.format(cloudlet.getExecStartTime())+ indent + indent  + dft.format(cloudlet.getFinishTime())+indent+indent + indent +cloudlet.getUserId() + indent + indent + indent + waitingTime[i] + indent + indent + indent + turnAroundTime[i]);
+						indent + indent  + dft.format(cloudlet.getExecStartTime())+ indent + indent  + dft.format(cloudlet.getFinishTime())+indent+indent + indent + dft.format(cloudlet.getExecStartTime()-cloudlet.getSubmissionTime()) + indent + indent + indent + dft.format(cloudlet.getWaitingTime())+ indent + indent + indent + dft.format(cloudlet.getFinishTime()-cloudlet.getSubmissionTime()));
 				
 								
 			}
